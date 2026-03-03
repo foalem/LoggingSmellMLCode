@@ -17,6 +17,7 @@ from data_collection.filter_logging_dataset import filter_logging_dataset
 from data_collection.summarize_logging_dataset import summarize_logging_dataset
 from data_collection.summarize_unique_functions import cli_summarize_unique_functions
 from data_collection.sample_snippets_by_library import cli_sample_snippets
+from data_collection.kappa import cli_compute_kappa
 
 def collect_command(args):
     logger = setup_logging(args.log_file)
@@ -242,6 +243,15 @@ def main():
 
     llm_smell_parser = subparsers.add_parser('llm_logging_smell_analysis', help='Analyze logging smells in sampled snippets using GPT-5-mini')
     llm_smell_parser.set_defaults(func=lambda args: __import__('data_collection.llm_logging_smell_analysis', fromlist=['cli_llm_logging_smell_analysis']).cli_llm_logging_smell_analysis(args))
+
+    # New CLI command to compute Cohen's kappa between two annotator files
+    kappa_parser = subparsers.add_parser('compute_kappa', help='Compute Cohen\'s kappa per smell between two annotation Excel files')
+    kappa_parser.add_argument('--file_a', type=str, default=os.path.join(PATH_FILE['data'], 'llm_logging_smell_results_1410_foalem.xlsx'), help='First annotator Excel file')
+    kappa_parser.add_argument('--file_b', type=str, default=os.path.join(PATH_FILE['data'], 'llm_logging_smell_results_1410_leuson.xlsx'), help='Second annotator Excel file')
+    kappa_parser.add_argument('--out_kappa', type=str, default=os.path.join(PATH_FILE['data'], 'kappa_by_smell_1410_foalem_leuson.xlsx'), help='Output Excel file for kappas')
+    kappa_parser.add_argument('--out_disagreements', type=str, default=os.path.join(PATH_FILE['data'], 'disagreements_1410_foalem_leuson.xlsx'), help='Output Excel file for disagreements')
+    kappa_parser.add_argument('--min_samples', type=int, default=2, help='Minimum paired samples required to compute kappa for a smell')
+    kappa_parser.set_defaults(func=cli_compute_kappa)
 
     args = parser.parse_args()
     args.func(args)
