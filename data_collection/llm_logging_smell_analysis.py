@@ -236,7 +236,7 @@ def analyze_with_llm(id_to_func: Dict[str, str], output_json: str):
     llm = ChatOpenAI(model="gpt-5-mini", temperature=0.2)
     results = {}
     for snip_id, func in id_to_func.items():
-        prompt = PROMPT_WITH_CATEGORIES_ONLY.format(function=func)
+        prompt = PROMPT_WITH_CATEGORIES.format(function=func)
         logging.info(f"Querying LLM for snippet_id={snip_id}")
         try:
             response = llm.invoke(prompt)
@@ -310,11 +310,11 @@ def save_results_to_excel(results_json: str, output_excel: str):
 
 # CLI entry point
 def cli_llm_logging_smell_analysis(args=None):
-    csv_in = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_sampled_snippets_selected_352.csv")
-    csv_out = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_sampled_snippets_selected_1410.csv")
-    json_in = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_filtered_function.json")
-    llm_json = os.path.join(os.path.dirname(__file__), "..", "data", "llm_logging_smell_results.json")
-    final_excel = os.path.join(os.path.dirname(__file__), "..", "data", "llm_logging_smell_results.xlsx")
+    csv_in = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_sampled_snippets_Agent.csv")
+    csv_out = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_sampled_snippets__Agent.csv")
+    json_in = os.path.join(os.path.dirname(__file__), "..", "data", "logging_dataset_filtered_function_Agent.json")
+    llm_json = os.path.join(os.path.dirname(__file__), "..", "data", "llm_logging_smell_results_Agent.json")
+    final_excel = os.path.join(os.path.dirname(__file__), "..", "data", "llm_logging_smell_results_Agent.xlsx")
     selected_ids = mark_selected_snippets(csv_in, csv_out)
     id_to_func = extract_functions(json_in, selected_ids)
     analyze_with_llm(id_to_func, llm_json)

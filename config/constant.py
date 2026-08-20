@@ -1,5 +1,5 @@
 GitHub_CONFIG = {
-    'token': [''],
+    'token': [  ],
     'per_page': 100,
     'max_page': 25
 
@@ -152,4 +152,4 @@ LOGGING_CONFIG = {
 }
 
 # Add your OpenAI API key here
-OPENAI_API_KEY = "Here_is_your_openai_api_key"
+OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"

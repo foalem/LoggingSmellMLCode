@@ -18,6 +18,8 @@ from data_collection.summarize_logging_dataset import summarize_logging_dataset
 from data_collection.summarize_unique_functions import cli_summarize_unique_functions
 from data_collection.sample_snippets_by_library import cli_sample_snippets
 from data_collection.kappa import cli_compute_kappa
+from data_collection.download_hf_aidev_dataset import cli_download_hf_aidev_dataset
+from data_collection.scan_framework_imports import cli_scan_framework_imports
 
 def collect_command(args):
     logger = setup_logging(args.log_file)
@@ -210,34 +212,34 @@ def main():
 
     dataset_parser = subparsers.add_parser('create_logging_json_dataset', help='Create a JSON dataset from logging Python files')
     dataset_parser.add_argument('--root_dir', type=str, default=os.path.join(PATH_FILE['data'], 'logging_files'), help='Root directory to search for logging Python files')
-    dataset_parser.add_argument('--output_file', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset.json'), help='Output JSON file path')
+    dataset_parser.add_argument('--output_file', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_Agent.json'), help='Output JSON file path')
     dataset_parser.add_argument('--log_file', type=str, default='logs/app.log', help='Path to log file')
     dataset_parser.set_defaults(func=create_logging_json_dataset_command)
 
     analyze_parser = subparsers.add_parser('analyze_logging_dataset', help='Analyze logging_dataset.json and output metrics as CSV')
-    analyze_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset.json'), help='Path to logging_dataset.json')
+    analyze_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_Agent.json'), help='Path to logging_dataset.json')
     analyze_parser.add_argument('--csv_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_metrics.csv'), help='Path to output CSV file')
     analyze_parser.set_defaults(func=analyze_logging_dataset_command)
 
     filter_parser = subparsers.add_parser('filter_logging_dataset', help='Filter logging_dataset.json to retain only relevant snippets and fields')
-    filter_parser.add_argument('--input_json', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset.json'), help='Input JSON file path')
-    filter_parser.add_argument('--output_json', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function.json'), help='Output filtered JSON file path')
+    filter_parser.add_argument('--input_json', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_Agent.json'), help='Input JSON file path')
+    filter_parser.add_argument('--output_json', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function_Agent.json'), help='Output filtered JSON file path')
     filter_parser.set_defaults(func=filter_logging_dataset_command)
 
     summarize_parser = subparsers.add_parser('summarize_logging_dataset', help='Summarize logging_dataset_filtered_function.json and output statistics as CSV')
-    summarize_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function.json'), help='Path to filtered logging dataset JSON')
-    summarize_parser.add_argument('--csv_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_summary.csv'), help='Path to output CSV file')
+    summarize_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function_Agent.json'), help='Path to filtered logging dataset JSON')
+    summarize_parser.add_argument('--csv_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_summary_Agent.csv'), help='Path to output CSV file')
     summarize_parser.set_defaults(func=summarize_logging_dataset_command)
 
     # New CLI command for unique function summary
     summarize_unique_parser = subparsers.add_parser('summarize_unique_functions', help='Summarize unique functions per logging library and log level')
-    summarize_unique_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function.json'), help='Path to filtered logging dataset JSON')
-    summarize_unique_parser.add_argument('--csv_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_unique_functions.csv'), help='Path to output CSV file')
+    summarize_unique_parser.add_argument('--json_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_filtered_function_Agent.json'), help='Path to filtered logging dataset JSON')
+    summarize_unique_parser.add_argument('--csv_path', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_unique_functions_Agent.csv'), help='Path to output CSV file')
     summarize_unique_parser.set_defaults(func=cli_summarize_unique_functions)
 
     sample_snippets_parser = subparsers.add_parser('sample_snippets', help='Sample code snippets by library and log level')
-    sample_snippets_parser.add_argument('--input_csv', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_unique_functions.csv'), help='Input CSV file with unique functions')
-    sample_snippets_parser.add_argument('--output_csv', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_sampled_snippets.csv'), help='Output CSV file for sampled snippets')
+    sample_snippets_parser.add_argument('--input_csv', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_unique_functions_Agent.csv'), help='Input CSV file with unique functions')
+    sample_snippets_parser.add_argument('--output_csv', type=str, default=os.path.join(PATH_FILE['data'], 'logging_dataset_sampled_snippets_Agent.csv'), help='Output CSV file for sampled snippets')
     sample_snippets_parser.add_argument('--random_state', type=int, default=42, help='Random state for reproducibility')
     sample_snippets_parser.set_defaults(func=cli_sample_snippets)
 
@@ -252,6 +254,28 @@ def main():
     kappa_parser.add_argument('--out_disagreements', type=str, default=os.path.join(PATH_FILE['data'], 'disagreements_1410_foalem_leuson.xlsx'), help='Output Excel file for disagreements')
     kappa_parser.add_argument('--min_samples', type=int, default=2, help='Minimum paired samples required to compute kappa for a smell')
     kappa_parser.set_defaults(func=cli_compute_kappa)
+
+    hf_download_parser = subparsers.add_parser(
+        'download_hf_aidev_dataset',
+        help='Download the Hugging Face AIDev all_repository parquet file and filter Python projects with more than 30 stars'
+    )
+    hf_download_parser.add_argument('--output_dir', type=str, default=PATH_FILE['data'], help='Directory where CSV files will be saved')
+    hf_download_parser.add_argument('--raw_output_file', type=str, default='all_repository_raw.csv', help='Filename for the raw downloaded dataset')
+    hf_download_parser.add_argument('--filtered_output_file', type=str, default='all_repository_python_gt_30_stars.csv', help='Filename for the filtered dataset')
+    hf_download_parser.add_argument('--min_stars', type=int, default=30, help='Minimum number of stars required')
+    hf_download_parser.add_argument('--log_file', type=str, default='logs/app.log', help='Path to log file')
+    hf_download_parser.set_defaults(func=cli_download_hf_aidev_dataset)
+
+    framework_scan_parser = subparsers.add_parser(
+        'scan_framework_imports',
+        help='Scan repositories in batches with GitHub code search to find target framework imports in Python files'
+    )
+    framework_scan_parser.add_argument('--input_file', type=str, default=os.path.join(PATH_FILE['data'], 'all_repository_python_gt_10_stars.csv'), help='Input CSV containing repository_full_name')
+    framework_scan_parser.add_argument('--output_file', type=str, default=os.path.join(PATH_FILE['data'], 'repositories_with_target_frameworks.csv'), help='Output CSV containing matched repositories')
+    framework_scan_parser.add_argument('--state_file', type=str, default=os.path.join(PATH_FILE['data'], 'repositories_with_target_frameworks_state.json'), help='State file used to resume the scan')
+    framework_scan_parser.add_argument('--batch_size', type=int, default=500, help='Number of repositories to process per run')
+    framework_scan_parser.add_argument('--log_file', type=str, default='logs/app.log', help='Path to log file')
+    framework_scan_parser.set_defaults(func=cli_scan_framework_imports)
 
     args = parser.parse_args()
     args.func(args)
