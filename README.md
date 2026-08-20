@@ -1,201 +1,282 @@
 # AntiPatternLoggingML
 
-A toolkit to collect, extract, and analyze logging usage and logging-related code snippets from GitHub repositories — focused on finding logging anti-patterns in machine learning code.
+A toolkit to collect, extract, and analyze logging usage and logging-related code snippets from GitHub repositories, with a focus on logging anti-patterns in machine learning code.
 
-The repository provides a CLI (implemented in `main.py`) with commands to:
-- collect repository metadata (archived/accessibility) from CSV lists of repos
+The repository provides a CLI in `main.py` to:
+- download and filter repository datasets from Hugging Face
+- scan repositories with GitHub code search for framework imports
+- collect repository metadata such as archived/accessibility status
 - merge collected metadata files
 - clone repositories
 - convert Jupyter notebooks to Python
-- extract Python files that contain logging/library calls
+- extract Python files that contain logging or library calls
 - clean leading comments before import statements
 - build a JSON dataset of logging snippets
 - analyze and summarize logging datasets
 - sample unique functions and snippets by library and log level
 - run an LLM-based logging smell analysis
 
-This README explains setup, usage examples for each CLI command, and tips for working with the pipeline.
+This README documents the current workflow and the commands implemented in `main.py`.
 
 ---
 
 ## Requirements
 
 - Python 3.10 or newer
-- Recommended: create and activate a virtual environment
+- Recommended: use a virtual environment or conda environment
 
-Install core dependencies (approximate list used by the project):
+Install project dependencies:
 
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install pandas gitpython nbconvert nbformat openpyxl
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-If you prefer, create a `requirements.txt` with these packages and install using `pip install -r requirements.txt`.
+If you install packages manually, the project commonly relies on:
+- `pandas`
+- `gitpython`
+- `nbconvert`
+- `nbformat`
+- `openpyxl`
+- `datasets` / parquet support for Hugging Face dataset access
+- `requests`
 
-Note: the project uses `pandas` to read/write CSV/Excel files and `GitPython` (`git`) to clone repositories.
+Some commands also rely on third-party APIs:
+- GitHub API tokens for repository/code search workflows
+- OpenAI API access for `llm_logging_smell_analysis`
 
 ---
 
 ## Project layout
 
-- `main.py` - CLI entrypoint. Implements multiple subcommands (see Usage).
-- `data/` - default data folder (configured in `config/constant.py`).
-- `data_collection/` - modules to collect repos, extract logging files, analyze datasets, and sample snippets.
-- `util/` - logging and utility helpers.
-- `logs/` - default log file location (`logs/app.log`).
-
-Open `config/constant.py` if you want to change the default paths.
+- `main.py` - CLI entrypoint
+- `data/` - default data folder configured in `config/constant.py`
+- `data_collection/` - dataset download, repository scanning, extraction, analysis, and sampling modules
+- `util/` - logging and helper utilities
+- `logs/` - default log file location (`logs/app.log`)
 
 ---
 
 ## Quick usage
 
-Run a CLI command like this (PowerShell examples):
-
 ```powershell
-# show help for the CLI
 python main.py -h
-
-# show help for a specific command
 python main.py collect -h
 ```
 
-All commands accept options; each command has sensible defaults defined in `main.py` (many default to paths inside `data/` and `logs/app.log`).
+Most commands write outputs into `data/` and logs into `logs/app.log` by default.
 
-### Common commands and examples
+---
 
-1) Collect GitHub repository metadata
+## Recommended workflow
 
-```powershell
-python main.py collect --data_folder data --log_file logs/app.log
-```
+### 1) Download the Hugging Face repository dataset
 
-This will find `*.csv` files inside `data/`, read repository names, query GitHub (via `data_collection.get_repo_infos`) to collect `accessible` and `archived` info, and write per-file outputs suffixed with `_with_archived.csv`.
-
-2) Merge archived results
+Downloads the `hao-li/AIDev` `all_repository` parquet file, saves the raw dataset, and creates a filtered CSV with Python repositories over a star threshold.
 
 ```powershell
-python main.py merge_archived --data_folder data --output_file merged_archived_dataset.csv
+python main.py download_hf_aidev_dataset
 ```
 
-Concatenates all `*_with_archived.csv` files, removes duplicates, and writes a merged CSV.
-
-3) Clone repositories from merged CSV
+Example with a custom threshold:
 
 ```powershell
-python main.py clone_repos --input_file data\merged_archived_dataset.csv --output_dir data\cloned_repos
+python main.py download_hf_aidev_dataset --min_stars 30
 ```
 
-Only clones repositories listed in the CSV. If the CSV contains `accessible` or `archived` columns, the CLI filters to `accessible == True` and `archived == False`.
+Default outputs:
+- `data\all_repository_raw.csv`
+- `data\all_repository_python_gt_30_stars.csv`
 
-4) Convert notebooks to Python files
+### 2) Scan repositories for target framework imports
+
+Scans repositories in batches using GitHub code search and saves matches incrementally so the run can be resumed safely.
 
 ```powershell
-python main.py convert_notebooks --root_dir data\cloned_repos
+python main.py scan_framework_imports
 ```
 
-Searches `root_dir` for `.ipynb` files and produces `.py` exports alongside them.
-
-5) Extract Python files with logging/library calls
+Example with custom files:
 
 ```powershell
-python main.py extract_logging_files --root_dir data\cloned_repos --output_dir data\logging_files
+python main.py scan_framework_imports --input_file .\data\all_repository_python_gt_10_stars.csv --output_file .\data\repositories_with_target_frameworks1.csv --state_file .\data\repositories_with_target_frameworks1_state.json --batch_size 500
 ```
 
-Uses AST helpers to identify files with library/logging calls and copies them (preserving repo-relative structure) into `data/logging_files`.
+Default files:
+- input: `data\all_repository_python_gt_10_stars.csv`
+- output: `data\repositories_with_target_frameworks.csv`
+- state: `data\repositories_with_target_frameworks_state.json`
 
-6) Remove header comments before imports
+Notes:
+- Results are saved each time a repository matches.
+- The state file stores where the scan stopped.
+- This command requires valid GitHub API tokens in `config/constant.py`.
+
+### 3) Clone repositories from a CSV
+
+Example for cloning repositories discovered by the framework scan:
 
 ```powershell
-python main.py clean_comments --root_dir data\logging_files
+python main.py clone_repos --input_file .\data\repositories_with_target_frameworks1_matches.csv --output_dir .\data\cloned_repos_frameworks1
 ```
 
-Removes comment lines that occur before the first import statement in each `.py` file — useful to reduce noise before parsing.
+The input CSV must contain `repository_full_name`.
 
-7) Create a JSON dataset of logging snippets
+If the CSV also has `accessible` or `archived` columns, only repositories with `accessible == True` and `archived == False` are cloned.
+
+### 4) Convert Jupyter notebooks to Python files
 
 ```powershell
-python main.py create_logging_json_dataset --root_dir data\logging_files --output_file data\logging_dataset.json
+python main.py convert_notebooks --root_dir .\data\cloned_repos_frameworks1
 ```
 
-Walks `root_dir`, extracts logging-related functions/snippets via `data_collection.ast_helpers.extract_all_logging_files` and writes a structured JSON dataset.
+This walks the directory tree and creates `.py` files next to each `.ipynb` file.
 
-8) Analyze the logging dataset (write metrics to CSV)
+### 5) Extract Python files that contain logging or library calls
 
 ```powershell
-python main.py analyze_logging_dataset --json_path data\logging_dataset.json --csv_path data\logging_dataset_metrics.csv
+python main.py extract_logging_files --root_dir .\data\cloned_repos_frameworks1 --output_dir .\data\logging_files
 ```
 
-9) Filter the logging dataset (keep only relevant fields/functions)
+### 6) Clean comments before import statements
 
 ```powershell
-python main.py filter_logging_dataset --input_json data\logging_dataset.json --output_json data\logging_dataset_filtered_function.json
+python main.py clean_comments --root_dir .\data\logging_files
 ```
 
-10) Summarize the filtered dataset
+### 7) Create the logging JSON dataset
+
+Current defaults are Agent-oriented:
 
 ```powershell
-python main.py summarize_logging_dataset --json_path data\logging_dataset_filtered_function.json --csv_path data\logging_dataset_summary.csv
+python main.py create_logging_json_dataset
 ```
 
-11) Summarize unique functions per logging library and log level
+Default output:
+- `data\logging_dataset_Agent.json`
+
+### 8) Analyze the logging dataset
 
 ```powershell
-python main.py summarize_unique_functions --json_path data\logging_dataset_filtered_function.json --csv_path data\logging_dataset_unique_functions.csv
+python main.py analyze_logging_dataset
 ```
 
-12) Sample snippets by library and level
+Default input/output:
+- input: `data\logging_dataset_Agent.json`
+- output: `data\logging_dataset_metrics.csv`
+
+### 9) Filter the logging dataset
 
 ```powershell
-python main.py sample_snippets --input_csv data\logging_dataset_unique_functions.csv --output_csv data\logging_dataset_sampled_snippets.csv
+python main.py filter_logging_dataset
 ```
 
-13) Run LLM logging smell analysis (uses module `data_collection.llm_logging_smell_analysis`)
+Default output:
+- `data\logging_dataset_filtered_function_Agent.json`
+
+### 10) Summarize the filtered dataset
+
+```powershell
+python main.py summarize_logging_dataset
+```
+
+Default output:
+- `data\logging_dataset_summary_Agent.csv`
+
+### 11) Summarize unique functions
+
+```powershell
+python main.py summarize_unique_functions
+```
+
+Default output:
+- `data\logging_dataset_unique_functions_Agent.csv`
+
+### 12) Sample snippets
+
+```powershell
+python main.py sample_snippets
+```
+
+Default output:
+- `data\logging_dataset_sampled_snippets_Agent.csv`
+
+### 13) Run LLM logging smell analysis
 
 ```powershell
 python main.py llm_logging_smell_analysis
 ```
 
-This command currently delegates to the `cli_llm_logging_smell_analysis` function; check `data_collection/llm_logging_smell_analysis.py` for configuration and model usage details.
+Current default files used by `data_collection/llm_logging_smell_analysis.py`:
+- `data\logging_dataset_sampled_snippets_Agent.csv`
+- `data\logging_dataset_filtered_function_Agent.json`
+- `data\llm_logging_smell_results_Agent.json`
+- `data\llm_logging_smell_results_Agent.xlsx`
 
 ---
 
-## Configuration & paths
+## Other available commands
 
-Defaults for data and other paths are defined in `config/constant.py`. If you want to change where data or logs are stored, update that file or pass explicit CLI arguments to the commands.
+### Collect GitHub repository metadata
 
-Logging output (both console and file) is managed with `util.log.setup_logging`; logs are written to `logs/app.log` by default.
+```powershell
+python main.py collect --data_folder data --log_file logs/app.log
+```
+
+Writes per-file outputs suffixed with `_with_archived.csv`.
+
+### Merge archived results
+
+```powershell
+python main.py merge_archived --data_folder data --output_file merged_archived_dataset.csv
+```
+
+### Compute Cohen's kappa between annotation files
+
+```powershell
+python main.py compute_kappa
+```
+
+---
+
+## Configuration
+
+Defaults are defined in `config/constant.py`, including:
+- `PATH_FILE['data']`
+- GitHub tokens and paging configuration
+- library/logging configuration lists
+- OpenAI API key placeholder
+
+Logging output is configured through `util.log.setup_logging` and is written to `logs/app.log` by default.
 
 ---
 
 ## Troubleshooting
 
-- Cloning failures: public repositories should clone via HTTPS. If some repos require credentials, configure Git authentication (SSH keys or a credential helper / PAT) and/or modify the `clone_repos` implementation to include credentials.
+- **GitHub API rate limits**: `scan_framework_imports` uses GitHub code search, which is heavily rate limited. Keep batch sizes reasonable and configure valid tokens.
+- **Interrupted framework scan**: rerun the same command with the same `--state_file` to resume.
+- **Clone failures**: configure Git authentication if HTTPS cloning fails for some repositories.
+- **Large dataset runs**: run commands on a subset first to validate the workflow.
+- **LLM command dependency issues**: `llm_logging_smell_analysis` depends on external model packages and API access. If imports fail in the environment, reinstall the required packages from `requirements.txt` and verify your OpenAI configuration before retrying.
+- **OpenAI key setup**: set the API key before running the LLM step if needed.
 
-- GitHub API rate limits: the `collect` command may query GitHub and could hit rate limits. Consider using authentication or run the collection in batches.
-
-- Missing packages: install the packages listed in the Requirements section.
-
-- Large datasets: some operations iterate over many repos/files — run them on a subset first to validate the pipeline.
-
----
-
-## Development & Contribution
-
-- Code is organized under `data_collection/` (domain logic) and `util/` (helpers).
-- Add small unit tests for core helpers (AST helpers, dataset filters) and run them before submitting PRs.
-
-If you'd like, I can also:
-- add a `requirements.txt` or `pyproject.toml` for reproducible installs
-- add example small datasets and a quick smoke-test script
-- add more detailed docs for `data_collection/llm_logging_smell_analysis`
+```powershell
+$env:OPENAI_API_KEY="your_api_key_here"
+python main.py llm_logging_smell_analysis
+```
 
 ---
 
-## License & contact
+## Notes
 
-This repository does not include a license file; add an appropriate `LICENSE` file if you plan to share the project.
+- Some filenames in the current workflow use the `Agent` suffix because the pipeline has been configured around those outputs.
+- The framework scan command behavior depends on the `FRAMEWORK_IMPORTS` mapping defined in `data_collection/scan_framework_imports.py`.
+- The input file used by `scan_framework_imports` can be changed explicitly with `--input_file`.
 
-For questions or help, open an issue or contact the maintainer.
+---
 
+## License
+
+This repository does not currently include a license file.
